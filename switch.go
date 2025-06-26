@@ -89,7 +89,7 @@ func (sw *Switch) ConfigureTeamEthernet(teams [6]*model.Team) error {
 				"create dhcp pool vlan%d\n"+
 				"config dhcp pool vlan%d add iprange 10.%s.20 10.%s.199\n"+
 				"config dhcp pool vlan%d gateway ip 10.%s.%d\n"+
-				"config dhcp pool vlan%d dns ip 8.8.8.8\n"
+				"config dhcp pool vlan%d dns ip 8.8.8.8\n",
 			vlan, teamPartialIp, switchTeamGatewayAddress,
 			vlan,
 			vlan, teamPartialIp, teamPartialIp,

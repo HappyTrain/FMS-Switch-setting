@@ -83,9 +83,9 @@ func (sw *Switch) ConfigureTeamEthernet(teams [6]*model.Team) error {
 			return
 		}
 		teamPartialIp := fmt.Sprintf("%d.%d", team.Id/100, team.Id%100)
+		addTeamVlansCommand := "enable dhcp_local_server\n"
 		addTeamVlansCommand += fmt.Sprintf(
 			"config ipif vlan%d ipaddress 10.%s.%d/24\n"+
-				"enable dhcp_local_server\n"+
 				"create dhcp pool vlan%d\n"+
 				"config dhcp pool vlan%d add iprange 10.%s.20 10.%s.199\n"+
 				"config dhcp pool vlan%d gateway ip 10.%s.%d\n"+

@@ -9,10 +9,11 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/Team254/cheesy-arena/model"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/Team254/cheesy-arena/model"
 )
 
 const (
@@ -34,6 +35,7 @@ const (
 type Switch struct {
 	address               string
 	port                  int
+	username              string
 	password              string
 	mutex                 sync.Mutex
 	configBackoffDuration time.Duration
@@ -47,6 +49,7 @@ func NewSwitch(address, password string) *Switch {
 	return &Switch{
 		address:               address,
 		port:                  switchTelnetPort,
+		username:              "admin",
 		password:              password,
 		configBackoffDuration: switchConfigBackoffDurationSec * time.Second,
 		configPauseDuration:   switchConfigPauseDurationSec * time.Second,
@@ -63,12 +66,22 @@ func (sw *Switch) ConfigureTeamEthernet(teams [6]*model.Team) error {
 
 	// Remove old team VLANs to reset the switch state.
 	removeTeamVlansCommand := ""
+	removeTeamVlansCommand += "config terminal\n"
 	for vlan := 10; vlan <= 60; vlan += 10 {
 		removeTeamVlansCommand += fmt.Sprintf(
-			"delete ipif vlan%d\n"+
-				"delete dhcp pool vlan%d\n", vlan, vlan,
+			"no interface vlan%d\n"+
+				"no ip dhcp pool vlan%d\n", vlan, vlan,
 		)
 	}
+	removeTeamVlansCommand += "exit\n"
+
+	/*	for vlan := 10; vlan <= 60; vlan += 10 {
+			removeTeamVlansCommand += fmt.Sprintf(
+				"delete ipif vlan%d\n"+
+					"delete dhcp pool vlan%d\n", vlan, vlan,
+			)
+		}
+	*/
 	_, err := sw.runConfigCommand(removeTeamVlansCommand)
 	if err != nil {
 		sw.Status = "ERROR"
@@ -77,25 +90,42 @@ func (sw *Switch) ConfigureTeamEthernet(teams [6]*model.Team) error {
 	time.Sleep(sw.configPauseDuration)
 
 	// Create the new team VLANs.
-	addTeamVlansCommand := ""
+	addTeamVlansCommand := "config terminal\n"
+	//addTeamVlansCommand := ""
 	addTeamVlan := func(team *model.Team, vlan int) {
 		if team == nil {
 			return
 		}
 		teamPartialIp := fmt.Sprintf("%d.%d", team.Id/100, team.Id%100)
-		addTeamVlansCommand := "enable dhcp_local_server\n"
+
 		addTeamVlansCommand += fmt.Sprintf(
-			"config ipif vlan%d ipaddress 10.%s.%d/24\n"+
-				"create dhcp pool vlan%d\n"+
-				"config dhcp pool vlan%d add iprange 10.%s.20 10.%s.199\n"+
-				"config dhcp pool vlan%d gateway ip 10.%s.%d\n"+
-				"config dhcp pool vlan%d dns ip 8.8.8.8\n",
-			vlan, teamPartialIp, switchTeamGatewayAddress,
+			"interface vlan %d\n"+
+				"ip address 10.%s.%d 255.255.255.0\n"+
+				"exit\n"+
+				"ip dhcp pool vlan%d\n"+
+				"network 10.%s.0 255.255.255.0\n"+
+				"default 10.%s.%d\n"+
+				"dns-server 8.8.8.8\n"+
+				"exit\n",
 			vlan,
-			vlan, teamPartialIp, teamPartialIp,
-			vlan, teamPartialIp, switchTeamGatewayAddress,
+			teamPartialIp, switchTeamGatewayAddress,
 			vlan,
+			teamPartialIp,
+			teamPartialIp, switchTeamGatewayAddress,
 		)
+
+		/*		addTeamVlansCommand += fmt.Sprintf(
+				"config ipif vlan%d ipaddress 10.%s.%d/24\n"+
+					"create dhcp pool vlan%d\n"+
+					"config dhcp pool vlan%d add iprange 10.%s.20 10.%s.199\n"+
+					"config dhcp pool vlan%d gateway ip 10.%s.%d\n"+
+					"config dhcp pool vlan%d dns ip 8.8.8.8\n",
+				vlan, teamPartialIp, switchTeamGatewayAddress,
+				vlan,
+				vlan, teamPartialIp, teamPartialIp,
+				vlan, teamPartialIp, switchTeamGatewayAddress,
+				vlan,
+			)*/
 	}
 	addTeamVlan(teams[0], red1Vlan)
 	addTeamVlan(teams[1], red2Vlan)
@@ -130,10 +160,11 @@ func (sw *Switch) runCommand(command string) (string, error) {
 
 	// Login to the AP, send the command, and log out all at once.
 	writer := bufio.NewWriter(conn)
-	_, err = writer.WriteString(fmt.Sprintf("%s\n%s\n", sw.password,
+	_, err = writer.WriteString(fmt.Sprintf("%s\n%s\n%s\n", sw.username,
+		sw.password,
 		command))
 	/*_, err = writer.WriteString(fmt.Sprintf("%s\nenable\n%s\nterminal length 0\n%sexit\n",
-    sw.password, sw.password, command))  Cisco才需要的指令*/
+	  sw.password, sw.password, command))  Cisco才需要的指令*/
 	if err != nil {
 		return "", err
 	}
@@ -154,5 +185,5 @@ func (sw *Switch) runCommand(command string) (string, error) {
 // Logs into the switch via Telnet and runs the given command in global configuration mode. Reads the output
 // and returns it as a string.
 func (sw *Switch) runConfigCommand(command string) (string, error) {
-	return sw.runCommand(command)//Cisco才需要的指令(fmt.Sprintf("config terminal\n%send\n\n", command))
+	return sw.runCommand(command) //Cisco才需要的指令(fmt.Sprintf("config terminal\n%send\n\n", command))
 }

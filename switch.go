@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -66,7 +67,7 @@ func (sw *Switch) ConfigureTeamEthernet(teams [6]*model.Team) error {
 
 	// Remove old team VLANs to reset the switch state.
 	removeTeamVlansCommand := ""
-	removeTeamVlansCommand += "config terminal\n"
+	//removeTeamVlansCommand := "config terminal\n"
 	for vlan := 10; vlan <= 60; vlan += 10 {
 		removeTeamVlansCommand += fmt.Sprintf(
 			"no interface vlan%d\n"+
@@ -75,13 +76,6 @@ func (sw *Switch) ConfigureTeamEthernet(teams [6]*model.Team) error {
 	}
 	removeTeamVlansCommand += "exit\n"
 
-	/*	for vlan := 10; vlan <= 60; vlan += 10 {
-			removeTeamVlansCommand += fmt.Sprintf(
-				"delete ipif vlan%d\n"+
-					"delete dhcp pool vlan%d\n", vlan, vlan,
-			)
-		}
-	*/
 	_, err := sw.runConfigCommand(removeTeamVlansCommand)
 	if err != nil {
 		sw.Status = "ERROR"
@@ -90,8 +84,8 @@ func (sw *Switch) ConfigureTeamEthernet(teams [6]*model.Team) error {
 	time.Sleep(sw.configPauseDuration)
 
 	// Create the new team VLANs.
-	addTeamVlansCommand := "config terminal\n"
-	//addTeamVlansCommand := ""
+	//addTeamVlansCommand := "config terminal\n"
+	addTeamVlansCommand := ""
 	addTeamVlan := func(team *model.Team, vlan int) {
 		if team == nil {
 			return
@@ -113,19 +107,6 @@ func (sw *Switch) ConfigureTeamEthernet(teams [6]*model.Team) error {
 			teamPartialIp,
 			teamPartialIp, switchTeamGatewayAddress,
 		)
-
-		/*		addTeamVlansCommand += fmt.Sprintf(
-				"config ipif vlan%d ipaddress 10.%s.%d/24\n"+
-					"create dhcp pool vlan%d\n"+
-					"config dhcp pool vlan%d add iprange 10.%s.20 10.%s.199\n"+
-					"config dhcp pool vlan%d gateway ip 10.%s.%d\n"+
-					"config dhcp pool vlan%d dns ip 8.8.8.8\n",
-				vlan, teamPartialIp, switchTeamGatewayAddress,
-				vlan,
-				vlan, teamPartialIp, teamPartialIp,
-				vlan, teamPartialIp, switchTeamGatewayAddress,
-				vlan,
-			)*/
 	}
 	addTeamVlan(teams[0], red1Vlan)
 	addTeamVlan(teams[1], red2Vlan)
@@ -143,8 +124,8 @@ func (sw *Switch) ConfigureTeamEthernet(teams [6]*model.Team) error {
 
 	// Give some time for the configuration to take before another one can be attempted.
 	time.Sleep(sw.configBackoffDuration)
-
 	sw.Status = "ACTIVE"
+
 	return nil
 }
 
@@ -154,17 +135,17 @@ func (sw *Switch) runCommand(command string) (string, error) {
 	// Open a Telnet connection to the switch.
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", sw.address, sw.port))
 	if err != nil {
+		log.Print(err)
 		return "", err
 	}
 	defer conn.Close()
 
 	// Login to the AP, send the command, and log out all at once.
 	writer := bufio.NewWriter(conn)
-	_, err = writer.WriteString(fmt.Sprintf("%s\n%s\n%s\n", sw.username,
+	_, err = writer.WriteString(fmt.Sprintf("%s\n%s\n%s\n"+"exit\n", sw.username,
 		sw.password,
 		command))
-	/*_, err = writer.WriteString(fmt.Sprintf("%s\nenable\n%s\nterminal length 0\n%sexit\n",
-	  sw.password, sw.password, command))  Cisco才需要的指令*/
+
 	if err != nil {
 		return "", err
 	}
@@ -184,6 +165,7 @@ func (sw *Switch) runCommand(command string) (string, error) {
 
 // Logs into the switch via Telnet and runs the given command in global configuration mode. Reads the output
 // and returns it as a string.
+
 func (sw *Switch) runConfigCommand(command string) (string, error) {
-	return sw.runCommand(command) //Cisco才需要的指令(fmt.Sprintf("config terminal\n%send\n\n", command))
+	return sw.runCommand(fmt.Sprintf("config terminal\n%s\n", command)) //Cisco才需要的指令(fmt.Sprintf("config terminal\n%send\n\n", command))
 }
